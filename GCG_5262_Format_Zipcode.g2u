@@ -1,0 +1,126 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'BN, Aug 28, 2018
+'Project 5262
+'Customer AWI Manufacturing
+'This project i  to validate Zipcode at Customer Master screen and Ship To screen to be in XXXXX-XXXX format
+
+f.Intrinsic.Control.Try
+	v.Local.sValid.Declare
+	v.Local.sCorrectedZipCode.Declare
+	v.Local.sSQL.Declare
+	'Only launch the check when country is blank, these variables are for country from the screens:
+	'Variable.Passed.000017
+	'Variable.Passed.000047
+	'Variable.Passed.000011
+
+	F.Intrinsic.Control.SelectCase(v.Caller.hook)
+		'Accounts Receivable > File > Customers > Open/New
+		'Pre-Save hook
+		'Bill To Zipcode: Variable.Passed.000013, Ship To Zipcode: Variable.Passed.000023
+		F.Intrinsic.Control.Case(14384)
+			'Check country
+			f.Intrinsic.Control.If(Variable.Passed.000017.Trim,=,"")
+				f.Intrinsic.Control.CallSub("Check_ZipCode_End","sZipToCheck","Bill To Zipcode","sInputZipCode",Variable.Passed.000013)
+			f.Intrinsic.Control.EndIf
+			'Check country
+			f.Intrinsic.Control.If(Variable.Passed.000047.Trim,=,"")
+				f.Intrinsic.Control.CallSub("Check_ZipCode_End","sZipToCheck","Ship To Zipcode","sInputZipCode",Variable.Passed.000023)
+			f.Intrinsic.Control.EndIf 		   	   
+		'Accounts Receivable > File > Customers > Open/New
+		'Zip-Code hooks, when zip-codes changed
+		'Bill To Zipcode: Variable.Passed.000013, Ship To Zipcode: Variable.Passed.000023
+		f.Intrinsic.Control.Case(14388)
+			'Check country
+			f.Intrinsic.Control.If(Variable.Passed.000017.Trim,=,"")
+				f.Intrinsic.Control.CallSub("Check_ZipCode","sZipToCheck","Bill To Zipcode","sInputZipCode",Variable.Passed.000013)
+			f.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Case(14389)
+			'Check country
+			f.IntrinsicCust.Control.If(Variable.Passed.000047.Trim,=,"")
+				f.Intrinsic.Control.CallSub("Check_ZipCode","sZipToCheck","Ship To Zipcode","sInputZipCode",Variable.Passed.000023)
+			f.Intrinsic.Control.EndIf	   
+		'Accounts Receivable > File > Customers > Open/New/Add'l Ship To button > Add button		
+		'Zip-code hook, when zip-codes changed
+		'Ship To Zipcode: Variable.Passed.000010
+		F.Intrinsic.Control.Case(14441)
+			'Check country
+			f.Intrinsic.Control.If(Variable.Passed.000011.Trim,<>,"")
+				f.Intrinsic.Control.ExitSub
+			f.Intrinsic.Control.EndIf			
+		   f.Intrinsic.Control.CallSub("Check_ZipCode","sZipToCheck","Ship To Zipcode","sInputZipCode",Variable.Passed.000010)		   
+		'Accounts Receivable > File > Customers > Open/New/Add'l Ship To button > Add button
+		'Post Save hook	- there is no Pre Save hook	for this screen  
+		'Ship To Zipcode: Variable.Passed.000010		 
+		F.Intrinsic.Control.Case(14443)
+			'Check country
+			f.Intrinsic.Control.If(Variable.Passed.000011.Trim,<>,"")
+				f.Intrinsic.Control.ExitSub
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.string.RegExMatch(Variable.Passed.000010,"^\d{5}-\d{4}$",True,v.Local.sValid)
+			F.Intrinsic.Control.If(V.Local.sValid.Trim,=,"")
+				'Ask user to correct the zip-code until it is in good format as XXXXX-XXXX				
+				f.Intrinsic.Control.DoUntil(V.Local.sValid.Trim,<>,"")
+					F.Intrinsic.UI.InputBox ("Please enter zip-code in format XXXXX-XXXX","Correct Zip-Code","",v.Local.sCorrectedZipCode)
+					f.Intrinsic.string.RegExMatch(V.Local.sCorrectedZipCode,"^\d{5}-\d{4}$",True,v.Local.sValid)
+					f.Intrinsic.Control.If(v.Local.sValid.Trim,<>,"")
+						'Update Zipcode
+						'Customer: Variable.Passed.000001, Ship To ID: Variable.Passed.000003
+						f.Intrinsic.String.Build("Update OE_MULTI_SHIP set SHIP_ZIP = '{0}',SHIP_TAX_ZIP = '{0}' where CUSTOMER = '{1}' and Ship_Seq = '{2}'",v.Local.sCorrectedZipCode,Variable.Passed.000001,Variable.Passed.000003,v.Local.sSQL)
+						F.ODBC.Connection!Conx.OpenCompanyConnection
+						f.ODBC.Connection!conx.Execute(v.Local.sSQL)
+						f.ODBC.Connection!Conx.Close
+					f.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.Loop				
+			f.Intrinsic.Control.EndIf		
+	F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Check_ZipCode_End.Start
+'Display message and prevent from saving if invalid
+f.Intrinsic.Control.Try
+v.Local.sHold.Declare
+v.Local.sValid.Declare
+
+f.Intrinsic.string.RegExMatch(V.Args.sInputZipCode,"^\d{5}-\d{4}$",True,v.Local.sValid)
+F.Intrinsic.Control.If(V.Local.sValid.Trim,=,"")
+	f.Intrinsic.String.Build("Cannot save.{0}{1} must be in XXXXX-XXXX format.",v.Ambient.NewLine,v.Args.sZipToCheck,v.Local.sHold)
+	f.Intrinsic.UI.Msgbox(v.Local.sHold,"Invalid Zipcode")
+	'Prevent core to Save
+	Variable.Passed.777777.Set(1)
+	'End program
+	f.Intrinsic.Control.End
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Check_ZipCode_End.End
+
+Program.Sub.Check_ZipCode.Start
+'Only display msg if invalid
+f.Intrinsic.Control.Try
+v.Local.sHold.Declare
+v.Local.sValid.Declare
+
+f.Intrinsic.string.RegExMatch(V.Args.sInputZipCode,"^\d{5}-\d{4}$",True,v.Local.sValid)
+F.Intrinsic.Control.If(V.Local.sValid.Trim,=,"")
+	f.Intrinsic.String.Build("{0}{1} must be in XXXXX-XXXX format.",v.Ambient.NewLine,v.Args.sZipToCheck,v.Local.sHold)
+	f.Intrinsic.UI.Msgbox(v.Local.sHold,"Invalid Zipcode")
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+	Function.Intrinsic.String.Build("Subroutine Error {0}{0}Subroutine: {1}{0}Error Occurred {2} with description {3}",V.Ambient.Newline,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Check_ZipCode.End
